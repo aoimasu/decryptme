@@ -1,45 +1,42 @@
 
 var crypto 		= require('crypto');
-var MongoDB 	= require('mongodb').Db;
-var Server 		= require('mongodb').Server;
-var moment 		= require('moment');
-
-var dbPort 		= 27017;
-var dbHost 		= 'localhost';
-var dbName 		= 'node-login';
+var mysql      = require('mysql');
 
 /* establish the database connection */
-
-var db = new MongoDB(dbName, new Server(dbHost, dbPort, {auto_reconnect: true}), {w: 1});
-	db.open(function(e, d){
-	if (e) {
-		console.log(e);
-	}	else{
-		console.log('connected to database :: ' + dbName);
-	}
+var connection = mysql.createConnection({
+  host     : 'mynote.net.au',
+  user     : 'meoadm',
+  password : '0906755586',
+  database : 'meoadm_iss',
 });
-var accounts = db.collection('accounts');
-
 /* login validation methods */
 
 exports.autoLogin = function(user, pass, callback)
 {
-	accounts.findOne({user:user}, function(e, o) {
-		if (o){
-			o.pass == pass ? callback(o) : callback(null);
+	
+	connection.query('SELECT * FROM customers WHERE loginname=\''+user+'\'', function(err, o, fields) {
+	  if (err) throw err;
+	  if (o){
+		  //console.log(o);
+			o.loginname == pass ? callback(o) : callback(null);
 		}	else{
 			callback(null);
 		}
+		//console.log(o);
+	  
 	});
 }
 
 exports.manualLogin = function(user, pass, callback)
 {
-	accounts.findOne({user:user}, function(e, o) {
-		if (o == null){
+	
+	connection.query('SELECT * FROM customers WHERE loginname=\''+user+'\'', function(err, o, fields) {
+	  o = o[0];
+	  if (o == null){
+		  
 			callback('user-not-found');
 		}	else{
-			validatePassword(pass, o.pass, function(err, res) {
+			validatePassword(pass, o.loginpassword, function(err, res) {
 				if (res){
 					callback(null, o);
 				}	else{
@@ -47,31 +44,34 @@ exports.manualLogin = function(user, pass, callback)
 				}
 			});
 		}
+	  
 	});
+	
 }
 
 /* record insertion, update & deletion methods */
 
 exports.addNewAccount = function(newData, callback)
 {
-	accounts.findOne({user:newData.user}, function(e, o) {
-		if (o){
+	
+	connection.query('SELECT * FROM customers WHERE loginname=\''+newData.user+'\'', function(err, o, fields) {
+	  
+	  if (o.length>0){
+		  //console.log(o);
 			callback('username-taken');
 		}	else{
-			accounts.findOne({email:newData.email}, function(e, o) {
-				if (o){
-					callback('email-taken');
-				}	else{
-					saltAndHash(newData.pass, function(hash){
-						newData.pass = hash;
-					// append date stamp when record was created //
-						newData.date = moment().format('MMMM Do YYYY, h:mm:ss a');
-						accounts.insert(newData, {safe: true}, callback);
-					});
-				}
+			saltAndHash(newData.pass, function(hash){
+				newData.pass = hash;
+				// append date stamp when record was created //
+				//newData.date = moment().format('MMMM Do YYYY, h:mm:ss a');
+				var post  = {customerType: 1, loginname: newData.user, loginpassword: hash};
+				var query = connection.query('INSERT INTO customers SET ?', post, function(err, result) {
+				  // Neat!
+				});
 			});
 		}
 	});
+	
 }
 
 exports.updateAccount = function(newData, callback)
@@ -169,9 +169,12 @@ var saltAndHash = function(pass, callback)
 
 var validatePassword = function(plainPass, hashedPass, callback)
 {
+	console.log(hashedPass);
 	var salt = hashedPass.substr(0, 10);
 	var validHash = salt + md5(plainPass + salt);
 	callback(null, hashedPass === validHash);
+	//console.log(hashedPass);
+	//callback(null, hashedPass === hashedPass);
 }
 
 /* auxiliary methods */
